@@ -1,3 +1,5 @@
+import socket
+
 from django.core.cache.backends.base import (
     BaseCache, DEFAULT_TIMEOUT, InvalidCacheBackendError,
 )
@@ -11,6 +13,7 @@ except ImportError:
     )
 
 from redis.connection import DefaultParser
+from redis.exceptions import ConnectionError, ResponseError, TimeoutError
 
 from redis_cache.connection import pool
 from redis_cache.utils import (
@@ -30,7 +33,16 @@ def get_client(write=False):
             version = kwargs.pop('version', None)
             client = self.get_client(key, write=write)
             key = self.make_key(key, version=version)
-            return method(self, client, key, *args, **kwargs)
+            ignore_exceptions = ()
+            if self.options.get('IGNORE_EXCEPTIONS', False):
+                ignore_exceptions = (
+                    TimeoutError, ResponseError, ConnectionError,
+                    socket.timeout
+                )
+            try:
+                return method(self, client, key, *args, **kwargs)
+            except ignore_exceptions:
+                return None            
 
         return wrapped
 
